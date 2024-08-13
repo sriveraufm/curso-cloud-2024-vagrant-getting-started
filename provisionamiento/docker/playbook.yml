@@ -1,0 +1,62 @@
+---
+- name: Setup Docker on Ubuntu
+  hosts: all
+  become: yes
+  vars:
+    docker_install_failed: false
+
+  tasks:
+
+    - name: Update apt-get repo and cache
+      ansible.builtin.apt:
+        update_cache: yes
+        force_apt_get: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages for Docker
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Set the edge Docker repository
+      ansible.builtin.apt_repository:
+        repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} edge
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+      register: docker_install_result
+      ignore_errors: true
+
+    - name: Set docker_install_failed variable if apt installation fails
+      set_fact:
+        docker_install_failed: true
+      when: docker_install_result.failed
+
+    - name: Install Docker using the Docker script if apt installation fails
+      ansible.builtin.command: |
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+      when: docker_install_failed
+
+    - name: Enable and start Docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
+      when: not docker_install_failed or docker_install_failed
